@@ -1,4 +1,4 @@
-from src.models.user import db
+from .db import db
 from datetime import datetime
 import json
 import os
