@@ -5,24 +5,20 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from flask import Flask, send_from_directory
 from flask_cors import CORS
-from src.models.user import db
-from src.routes.user import user_bp
-from src.routes.config_simple import config_bp
-from src.routes.patient import patient_bp
-from src.routes.exam import exam_bp
-from src.routes.reports import reports_bp
+from src.models import db  # <-- usa a instância única
+
+# blueprints: vamos importar DEPOIS de configurar o app e o db
+# from src.routes.user import user_bp
+# from src.routes.config_simple import config_bp
+# from src.routes.patient import patient_bp
+# from src.routes.exam import exam_bp
+# from src.routes.reports import reports_bp
 
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'asdf#FGSgvasgf$5$WGT')
 
 # Habilita CORS para todas as rotas
 CORS(app, origins=['*'])
-
-app.register_blueprint(user_bp, url_prefix='/api')
-app.register_blueprint(config_bp, url_prefix='/api')
-app.register_blueprint(patient_bp, url_prefix='/api')
-app.register_blueprint(exam_bp, url_prefix='/api')
-app.register_blueprint(reports_bp, url_prefix='/api')
 
 def _normalize_database_url(url: str) -> str:
     # Render/Heroku às vezes expõem 'postgres://' ou 'postgresql://'
@@ -41,17 +37,32 @@ else:
     app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(os.path.dirname(__file__), 'database', 'app.db')}"
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-# Recomendações para conexões em ambientes serverless/containers
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-    'pool_pre_ping': True,     # testa conexão antes de usar
-    'pool_recycle': 300        # recicla conexões a cada 5 min
+    'pool_pre_ping': True,
+    'pool_recycle': 300
 }
 
-# Importar modelos após inicializar db
+# **Inicializa o db com ESTE app antes de importar models**
+db.init_app(app)
+
+# Importar modelos após inicializar db (evita instâncias múltiplas)
 from src.models.config_simple import Config
 from src.models.patient import Patient
 from src.models.exam import Exam
+from src.models.user import User
+
+# Agora podemos importar e registrar os blueprints
+from src.routes.user import user_bp
+from src.routes.config_simple import config_bp
+from src.routes.patient import patient_bp
+from src.routes.exam import exam_bp
+from src.routes.reports import reports_bp
+
+app.register_blueprint(user_bp, url_prefix='/api')
+app.register_blueprint(config_bp, url_prefix='/api')
+app.register_blueprint(patient_bp, url_prefix='/api')
+app.register_blueprint(exam_bp, url_prefix='/api')
+app.register_blueprint(reports_bp, url_prefix='/api')
 
 with app.app_context():
     db.create_all()
@@ -61,7 +72,7 @@ with app.app_context():
 def serve(path):
     static_folder_path = app.static_folder
     if static_folder_path is None:
-            return "Static folder not configured", 404
+        return "Static folder not configured", 404
 
     if path != "" and os.path.exists(os.path.join(static_folder_path, path)):
         return send_from_directory(static_folder_path, path)
