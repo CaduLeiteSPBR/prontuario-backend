@@ -46,17 +46,17 @@ def save_file(self, file, patient_id):
 
     
     def extract_text_from_file(self, file_path, file_type):
-    """Extrai texto do arquivo (simplificado, sem OCR real para imagens)"""
-    try:
-        if file_type == "pdf":
-            return self._extract_text_from_pdf(file_path)
-        elif file_type == "image":
-            # Sem Tesseract no Render por padrão — devolve um texto placeholder
-            return "Texto extraído da imagem (OCR não disponível em produção)", None
-        else:
-            return None, "Tipo de arquivo não suportado"
-    except Exception as e:
-        return None, f"Erro ao extrair texto: {str(e)}"
+        """Extrai texto do arquivo (simplificado, sem OCR real para imagens)"""
+        try:
+            if file_type == "pdf":
+                return self._extract_text_from_pdf(file_path)
+            elif file_type == "image":
+                # Sem Tesseract no Render por padrão — devolve um texto placeholder
+                return "Texto extraído da imagem (OCR não disponível em produção)", None
+            else:
+                return None, "Tipo de arquivo não suportado"
+        except Exception as e:
+            return None, f"Erro ao extrair texto: {str(e)}"
 
     
     def _extract_text_from_pdf(self, file_path):
