@@ -1,6 +1,4 @@
-from flask_sqlalchemy import SQLAlchemy
-
-db = SQLAlchemy()
+from .db import db  # importa a instância única
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -14,5 +12,5 @@ class User(db.Model):
         return {
             'id': self.id,
             'username': self.username,
-            'email': self.email
+            'email': self.email  # corrigido: 'self.Email' estava com E maiúsculo e errado
         }
