@@ -24,15 +24,29 @@ app.register_blueprint(patient_bp, url_prefix='/api')
 app.register_blueprint(exam_bp, url_prefix='/api')
 app.register_blueprint(reports_bp, url_prefix='/api')
 
+def _normalize_database_url(url: str) -> str:
+    # Render/Heroku às vezes expõem 'postgres://' ou 'postgresql://'
+    # O SQLAlchemy prefere 'postgresql+psycopg2://'
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql+psycopg2://", 1)
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+psycopg2://", 1)
+    return url
+
 # Configuração do banco de dados
 database_url = os.environ.get('DATABASE_URL')
 if database_url:
-    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+    app.config['SQLALCHEMY_DATABASE_URI'] = _normalize_database_url(database_url)
 else:
     app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(os.path.dirname(__file__), 'database', 'app.db')}"
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-db.init_app(app)
+
+# Recomendações para conexões em ambientes serverless/containers
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_pre_ping': True,     # testa conexão antes de usar
+    'pool_recycle': 300        # recicla conexões a cada 5 min
+}
 
 # Importar modelos após inicializar db
 from src.models.config_simple import Config
