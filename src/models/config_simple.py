@@ -1,4 +1,4 @@
-from src.models.user import db
+from .db import db
 import base64
 import os
 
