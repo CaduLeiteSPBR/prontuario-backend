@@ -16,40 +16,48 @@ class FileService:
         return '.' in filename and \
                filename.rsplit('.', 1)[1].lower() in self.allowed_extensions
     
-    def save_file(self, file, patient_id):
-        """Salva arquivo no sistema"""
-        if not file or not self.allowed_file(file.filename):
-            return None, "Tipo de arquivo não permitido"
-        
-        # Gera nome único para o arquivo
-        filename = secure_filename(file.filename)
-        unique_filename = f"{uuid.uuid4()}_{filename}"
-        
-        # Cria pasta do paciente se não existir
-        patient_folder = os.path.join(self.upload_folder, str(patient_id))
-        if not os.path.exists(patient_folder):
-            os.makedirs(patient_folder)
-        
-        # Salva o arquivo
-        file_path = os.path.join(patient_folder, unique_filename)
-        file.save(file_path)
-        
-        return file_path, None
+def save_file(self, file, patient_id):
+    """Salva arquivo no sistema e retorna metadados compatíveis com exam.py"""
+    if not file or not self.allowed_file(file.filename):
+        raise ValueError("Tipo de arquivo não permitido")
+
+    filename = secure_filename(file.filename)
+    ext = filename.rsplit('.', 1)[1].lower()
+
+    # cria pasta uploads/<patient_id>
+    patient_folder = os.path.join(self.upload_folder, str(patient_id))
+    if not os.path.exists(patient_folder):
+        os.makedirs(patient_folder)
+
+    # salva com nome único
+    unique_filename = f"{uuid.uuid4()}_{filename}"
+    file_path = os.path.join(patient_folder, unique_filename)
+    file.save(file_path)
+
+    # monta metadados no formato esperado por exam.py
+    info = {
+        "original_filename": filename,
+        "file_path": file_path,
+        "file_size": os.path.getsize(file_path),
+        "file_type": "pdf" if ext == "pdf" else "image",
+        "mime_type": "application/pdf" if ext == "pdf" else f"image/{ext}"
+    }
+    return info
+
     
-    def extract_text_from_file(self, file_path):
-        """Extrai texto do arquivo (versão simplificada)"""
-        try:
-            file_extension = file_path.lower().split('.')[-1]
-            
-            if file_extension == 'pdf':
-                return self._extract_text_from_pdf(file_path)
-            elif file_extension in ['png', 'jpg', 'jpeg']:
-                return "Texto extraído da imagem (OCR não disponível em produção)", None
-            else:
-                return None, "Tipo de arquivo não suportado"
-        
-        except Exception as e:
-            return None, f"Erro ao extrair texto: {str(e)}"
+    def extract_text_from_file(self, file_path, file_type):
+    """Extrai texto do arquivo (simplificado, sem OCR real para imagens)"""
+    try:
+        if file_type == "pdf":
+            return self._extract_text_from_pdf(file_path)
+        elif file_type == "image":
+            # Sem Tesseract no Render por padrão — devolve um texto placeholder
+            return "Texto extraído da imagem (OCR não disponível em produção)", None
+        else:
+            return None, "Tipo de arquivo não suportado"
+    except Exception as e:
+        return None, f"Erro ao extrair texto: {str(e)}"
+
     
     def _extract_text_from_pdf(self, file_path):
         """Extrai texto de PDF"""
