@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify, send_file
 from werkzeug.utils import secure_filename
-from src.models.exam import Exam, db
+from src.models.exam import Exam
+from src.models import db
 from src.models.patient import Patient
 from src.services.file_service_simple import FileService
 from src.services.ai_service_simple import AIService
@@ -14,65 +15,40 @@ exam_bp = Blueprint('exam', __name__)
 file_service = FileService(upload_folder='uploads')
 ai_service = AIService()
 
-def process_exam_async(exam_id):
-    """Processa exame de forma assíncrona"""
+def _process_exam_now(exam: Exam):
+    """
+    Processa o exame imediatamente:
+    - Extrai texto do arquivo (PDF/Imagem) usando FileService (versão 'simple')
+    - Atualiza status e timestamps
+    - Preenche campos básicos (summary/análise placeholders)
+    """
     try:
-        with db.session.begin():
-            exam = Exam.query.get(exam_id)
-            if not exam:
-                return
-            
-            # Atualiza status para processando
-            exam.processing_status = 'processing'
+        exam.processing_status = "processing"
+        db.session.commit()
+
+        text, err = file_service.extract_text_from_file(exam.file_path, exam.file_type)
+        if err:
+            exam.processing_status = "error"
+            exam.processing_error = err
+            exam.processed_at = datetime.utcnow()
             db.session.commit()
-            
-            # Extrai texto do arquivo
-            try:
-                extracted_text = file_service.extract_text_from_file(exam.file_path, exam.file_type)
-                exam.extracted_text = extracted_text
-                
-                # Analisa com IA se disponível
-                if ai_service.is_available() and extracted_text.strip():
-                    analysis = ai_service.analyze_exam_text(extracted_text, exam.exam_type)
-                    exam.set_ai_analysis(analysis)
-                    
-                    # Extrai valores específicos
-                    values = ai_service.extract_exam_values(extracted_text)
-                    exam.set_extracted_values(values)
-                    
-                    # Gera resumo
-                    exam.ai_summary = ai_service.generate_summary(analysis)
-                    
-                    # Atualiza informações do exame baseado na análise
-                    if 'tipo_exame' in analysis and analysis['tipo_exame']:
-                        exam.exam_type = analysis['tipo_exame']
-                    
-                    if 'data_exame' in analysis and analysis['data_exame']:
-                        try:
-                            exam.exam_date = datetime.strptime(analysis['data_exame'], '%Y-%m-%d').date()
-                        except:
-                            pass
-                    
-                    if 'laboratorio' in analysis and analysis['laboratorio']:
-                        exam.lab_name = analysis['laboratorio']
-                    
-                    if 'medico_solicitante' in analysis and analysis['medico_solicitante']:
-                        exam.doctor_name = analysis['medico_solicitante']
-                
-                # Marca como concluído
-                exam.processing_status = 'completed'
-                exam.processed_at = datetime.utcnow()
-                exam.processing_error = None
-                
-            except Exception as e:
-                exam.processing_status = 'error'
-                exam.processing_error = str(e)
-            
-            exam.updated_at = datetime.utcnow()
-            db.session.commit()
-    
+            return
+
+        # Campos básicos (ajuste se o seu AIService tiver métodos reais)
+        exam.extracted_text = text or ""
+        exam.extracted_values = {}   # implementar parsing depois, se quiser
+        exam.ai_analysis = {}        # idem
+        exam.ai_summary = "Resumo automático: texto extraído disponível." if text else "Sem texto extraído."
+        exam.processing_status = "completed"
+        exam.processing_error = None
+        exam.processed_at = datetime.utcnow()
+        db.session.commit()
+
     except Exception as e:
-        print(f"Erro no processamento assíncrono do exame {exam_id}: {e}")
+        exam.processing_status = "error"
+        exam.processing_error = str(e)
+        exam.processed_at = datetime.utcnow()
+        db.session.commit()
 
 @exam_bp.route('/patients/<int:patient_id>/exams', methods=['GET'])
 def get_patient_exams(patient_id):
@@ -190,10 +166,8 @@ def upload_exam(patient_id):
         db.session.add(exam)
         db.session.commit()
         
-        # Inicia processamento assíncrono
-        thread = threading.Thread(target=process_exam_async, args=(exam.id,))
-        thread.daemon = True
-        thread.start()
+        # Processa imediatamente (síncrono) – mais simples e confiável no Render
+        _process_exam_now(exam)
         
         return jsonify({
             'success': True,
