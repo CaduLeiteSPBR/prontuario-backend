@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
-from src.models.config_simple import Config, db
+from src.models import db
+from src.models.config_simple import Config
 
 config_bp = Blueprint('config', __name__)
 
@@ -59,6 +60,26 @@ def save_config():
             'success': False,
             'error': str(e)
         }), 500
+
+@config_bp.route('/config/openai_api_key', methods=['POST'])
+def save_openai_key():
+    """Alias para salvar a chave da OpenAI quando o frontend chama /config/openai_api_key"""
+    data = request.get_json() or {}
+
+    # Aceita tanto {"api_key": "..."} quanto {"value": "..."}
+    value = data.get('api_key') or data.get('value')
+    if not value:
+        return jsonify({"success": False, "error": "Chave da API é obrigatória"}), 400
+
+    if not value.startswith('sk-'):
+        return jsonify({"success": False, "error": 'Chave da API deve começar com "sk-"'}), 400
+
+    config = Config.set_config('openai_api_key', value)
+    return jsonify({
+        "success": True,
+        "message": "Chave da OpenAI salva com sucesso",
+        "config": config.to_dict()
+    })
 
 @config_bp.route('/config/<key>', methods=['DELETE'])
 def delete_config(key):
